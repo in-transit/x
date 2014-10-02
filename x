@@ -13,8 +13,28 @@
 #	sudo chmod 600 /var/log/alerts/50-ossec-alert-messages.log
 #	sudo chown syslog:adm /var/log/alerts/50-ossec-alert-messages.log
 
-# An exmaple of an /etc/rsyslog.conf that works with this is located at http://in-transit.me/x-rsyslog-conf
+# An exmaple of an /etc/rsyslog.conf that works with this is located at
+# http://in-transit.me/x-rsyslog-conf
 
+# START ParseAlertString function
+function ParseAlertString {
+
+SrcIP=$(echo $Alert | sed -e '/^.*src_ip\=\"//g' | sed -e '\"\,\ message//g')
+DestIP=$(echo $Alert | sed -e '/^.*component.*\)\ //g' | sed -e '/\-\>.*//g')
+RuleId=$(echo $Alert | sed -e '/^.*id\=//g' | sed -e '/\ description.*$//g')
+
+# END ParseAlertString function
+}
+
+# START GenerateThreatID function
+function GenerateThreatID {
+
+ThreatID=$(date +%s)
+
+# END GenerateThreatID function
+}
+
+# START GetInput function
 function GetInput {
 
 while read line
@@ -27,7 +47,7 @@ do
 
   IsNet=$(echo $Alert | grep src_ip > /dev/null && echo 1 || echo 0)
 
-  if [ $IsNet -eq 1 ]; then 
+  if [ $IsNet -eq 1 ]; then
 
     echo "It's Network."
 
@@ -38,8 +58,10 @@ do
   fi
 
   # END Test string for "src_ip"
+
 done
 
+# END GetInput function
 }
 
 GetInput
