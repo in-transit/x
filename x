@@ -31,10 +31,10 @@
 # $IsNet is the determination of it being a network related event.
 # $line is the single line inputed from the fifo pipe.
 
-# Functions
+# Functionsy
 # fParseAlertString will gather $SrcIP, $DestIP, and $RuleID.
 # fGenerateThreatID will generate $ThreatID.
-# fIsNet will determine if the alert is network related by the presence of $SrcIP.
+# fIsNet will determine if the alert is network related by the presence of src_ip.
 
 
 # START fParseAlertString function
@@ -46,6 +46,13 @@ RuleID=$(echo $Alert | sed -e '/^.*id\=//g' | sed -e '/\ description.*$//g')
 
 # END fParseAlertString function
 }
+
+# START fIsInDataBase function
+function fIsInDataBase {
+
+}
+
+# END fIsInDataBase function
 
 # START fGenerateThreatID function
 function fGenerateThreatID {
@@ -68,16 +75,6 @@ do
 
   IsNet=$(echo $Alert | grep src_ip > /dev/null && echo 1 || echo 0)
 
-  if [ $IsNet -eq 1 ]; then
-
-    echo "It's Network."
-
-  else
-
-    echo "It's Not Network."
-
-  fi
-
   # END Test string for "src_ip"
 
 done
@@ -85,5 +82,10 @@ done
 # END fGetInput function
 }
 
-GetInput
+fGetInput
 
+if [ $IsNet -eq 1 ]; then
+
+  fParseAlertString
+
+fi
