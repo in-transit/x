@@ -1,12 +1,20 @@
 #!/bin/bash
 
-# x,v0.2
+# x,v0.2.2
 
 # http://github.com/in-transit/x
 
 # This service runs in the background in conjuction with ossec. It will read
 # alert messages that are pushed to a pipe from rsyslog and process them
-# indivudally.
+# indivudally. OSSEC will need to push the log to the syslog server as type
+# splunk.
+
+# Example: You can prepend this following lines to the ossec.conf file.
+#  <syslog_output>
+#    <server>localhost</server>
+#    <port>514</port>
+#    <format>splunk</format>
+#  </syslog_output>
 
 # Create the pipe to be used with this service
 #
@@ -30,12 +38,30 @@
 # $ThreatID is a generated ID nubmer for the alert done in Unix time.
 # $IsNet is the determination of it being a network related event.
 # $line is the single line inputed from the fifo pipe.
+# $IsInDataBase determines if the block has already happened by x.
 
-# Functionsy
+# Functions
+# fHOUSEKEEPING will reset all variables to prevent subsequent flase executions.
 # fParseAlertString will gather $SrcIP, $DestIP, and $RuleID.
 # fGenerateThreatID will generate $ThreatID.
 # fIsNet will determine if the alert is network related by the presence of src_ip.
+# fIsInDataBase determines if the block has already happened by x.
 
+# START HOUSEKEEPING
+function fHOUSEKEEPING {
+
+  Alert=""
+  SrcIP=""
+  DestIP=""
+  RuleID=""
+  ThreatID=""
+  IsNet=""
+  line=""
+  IsInDataBase=""
+
+}
+
+# END HOUSEKEEPING
 
 # START fParseAlertString function
 function fParseAlertString {
@@ -50,9 +76,10 @@ RuleID=$(echo $Alert | sed -e '/^.*id\=//g' | sed -e '/\ description.*$//g')
 # START fIsInDataBase function
 function fIsInDataBase {
 
-}
+  IsInDataBase=$(grep -e "$SrcIP,$DestIP" threat.db > /dev/null && echo 1 || echo 0)
 
-# END fIsInDataBase function
+# END fIsInDatabase function
+}
 
 # START fGenerateThreatID function
 function fGenerateThreatID {
@@ -68,24 +95,39 @@ function fIsNet {
 while read line
 do
 
-  # Collect the alert message
   Alert=$(echo ${line})
-
-  # BEGIN Test string for "src_ip"
 
   IsNet=$(echo $Alert | grep src_ip > /dev/null && echo 1 || echo 0)
 
-  # END Test string for "src_ip"
-
 done
 
-# END fGetInput function
+# END fIsNet function
 }
 
-fGetInput
 
-if [ $IsNet -eq 1 ]; then
+# BEGIN RUN LIST
 
-  fParseAlertString
+while :
 
-fi
+do
+
+  fIsNet
+
+  if [ $IsNet -eq 1 ]; then
+
+    fParseAlertString
+    fIsInDataBase
+
+    if [ $IsInDataBase -eq 0 ]; then
+
+      fGenerateThreatID
+
+    fi
+
+  fi
+
+  fHOUSEKEEPING
+
+# END RUN LIST
+
+done
