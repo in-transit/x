@@ -39,6 +39,8 @@
 # $IsNet is the determination of it being a network related event.
 # $line is the single line inputed from the fifo pipe.
 # $IsInDataBase determines if the block has already happened by x.
+# $SrcIsPublic will find if $SrcIP is private or public (RFC 1918)
+# $DestIsPublic will find if $DestIP is private or public (RFC 1918)
 
 # Functions
 # fHOUSEKEEPING will reset all variables to prevent subsequent flase executions.
@@ -46,6 +48,12 @@
 # fGenerateThreatID will generate $ThreatID.
 # fIsNet will determine if the alert is network related by the presence of src_ip.
 # fIsInDataBase determines if the block has already happened by x.
+# fSrcIsPublic will find if $SrcIP is private or public (RFC 1918)
+# fDestIsPublic will find if $DestIP is private or public (RFC 1918)
+
+# TO BE DONE:
+# 1. fAttackDetermination will call to a pending attack function which will
+#    increment the log item then proceed with a determination to attack.
 
 # START HOUSEKEEPING
 function fHOUSEKEEPING {
@@ -58,6 +66,12 @@ function fHOUSEKEEPING {
   IsNet=""
   line=""
   IsInDataBase=""
+  SrcIsPublic=""
+  DestIsPublic=""
+  AttackLevel=""
+  SrcZone=""
+  DestZone=""
+  AttackLevel=""
 
 }
 
@@ -66,9 +80,12 @@ function fHOUSEKEEPING {
 # START fParseAlertString function
 function fParseAlertString {
 
-SrcIP=$(echo $Alert | sed -e '/^.*src_ip\=\"//g' | sed -e '\"\,\ message//g')
-DestIP=$(echo $Alert | sed -e '/^.*component.*\)\ //g' | sed -e '/\-\>.*//g')
-RuleID=$(echo $Alert | sed -e '/^.*id\=//g' | sed -e '/\ description.*$//g')
+  SrcIP=$(echo $Alert | sed -e 's/^.*src_ip\=\"//g' | sed -e 's/\"\,\ message.*$//g')
+  DestIP=$(echo $Alert | sed -e 's/^.*component.*)\ //g' | sed -e 's/->.*$//g')
+  RuleID=$(echo $Alert | sed -e 's/^.*id=//g' | sed -e 's/\ description.*$//g')
+  echo "SrcIP:" $SrcIP
+  echo "DestIP:" $DestIP
+  echo "RuleID:" $RuleID
 
 # END fParseAlertString function
 }
@@ -76,7 +93,8 @@ RuleID=$(echo $Alert | sed -e '/^.*id\=//g' | sed -e '/\ description.*$//g')
 # START fIsInDataBase function
 function fIsInDataBase {
 
-  IsInDataBase=$(grep -e "$SrcIP,$DestIP" threat.db > /dev/null && echo 1 || echo 0)
+  IsInDataBase=$(grep -e "$SrcIP,$DestIP," threat.db > /dev/null && echo 1 || echo 0)
+  echo "IsInDataBase:" $IsInDataBase
 
 # END fIsInDatabase function
 }
@@ -84,7 +102,8 @@ function fIsInDataBase {
 # START fGenerateThreatID function
 function fGenerateThreatID {
 
-ThreatID=$(date +%s)
+  ThreatID=$(date +%s)
+  echo "ThreatID:" $ThreatID
 
 # END fGenerateThreatID function
 }
@@ -92,22 +111,139 @@ ThreatID=$(date +%s)
 # START fIsNet function
 function fIsNet {
 
-while read line
-do
-
   Alert=$(echo ${line})
+  echo "Alert:" $Alert
 
   IsNet=$(echo $Alert | grep src_ip > /dev/null && echo 1 || echo 0)
-
-done
+  echo "IsNet:" $IsNet
 
 # END fIsNet function
 }
 
+# START fSrcIsPublic function
+function fSrcIsPublic {
+
+  SrcIsPublic=$(echo $SrcIP | sed -e '/10\./d' | sed -e '/192\.168\./d' | sed -e '/172\.1[6-9]\./d' | sed -e '/172\.2[0-9]\./d' | sed -e '/172\.3[0-1]\./d' | grep -Eo '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' > /dev/null && echo 1 || echo 0)
+  echo "SrcIsPublic:" $SrcIsPublic
+
+# END fSrcIsPublic function
+}
+
+# START fDestIsPublic function
+function fDestIsPublic {
+
+  DestIsPublic=$(echo $DestIP | sed -e '/10\./d' | sed -e '/192\.168\./d' | sed -e '/172\.1[6-9]\./d' | sed -e '/172\.2[0-9]\./d' | sed -e '/172\.3[0-1]\./d' | grep -Eo '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}' > /dev/null && echo 1 || echo 0)
+  echo "DestIsPublic:" $DestIsPublic
+
+# END fDestIsPublic function
+}
+
+# START fZone function
+function fZone {
+
+  if [ $SrcIsPublic -eq 1 ]; then
+
+    SrcZone="Public"
+    echo "SrcZone:" $SrcZone
+
+  elif [ $SrcIsPublic -eq 0 ]; then
+
+    SrcZone="Not Public"
+    echo "SrcZone:" $SrcZone
+
+  fi
+
+  if [ $DestIsPublic -eq 1 ]; then
+
+    DestZone="Public"
+    echo "DestZone:" $DestZone
+
+  elif [ $DestIsPublic -eq 0 ]; then
+
+    DestZone="Not Public"
+    echo "DestZone:" $DestZone
+
+  fi
+# END fZone function
+}
+
+
+# START fAttackLevel function
+function fAttackLevel {
+
+  if [ $SrcIsPublic -eq 1 -a $DestIsPublic -eq 0 ]; then
+
+    AttackLevel=4
+    echo "AttackLevel:" $AttackLevel
+
+  elif [ $SrcIsPublic -eq 1 -a $DestIsPublic -eq 1 ]; then
+
+    AttackLevel=3
+    echo "AttackLevel:" $AttackLevel
+
+  elif [ $SrcIsPublic -eq 0 -a $DestIsPublic -eq 1 ]; then
+
+    AttackLevel=2
+    echo "AttackLevel:" $AttackLevel
+
+  elif [ $SrcIsPublic -eq 0 -a $DestIsPublic -eq 0 ]; then
+
+    AttackLevel=1
+    echo "AttackLevel:" $AttackLevel
+
+  fi
+
+# END fAttackLevel function
+}
+
+# START fPendingAttack function
+function fPendingAttack {
+
+# END fPendingAttack function
+}
+
+# START fAttackDetermination function
+function fAttackDetermination {
+
+  if [ $AttackLevel -eq 4 ]; then
+
+    AttackNow=1
+
+  elif [ $AttackLevel -eq 3 ]; then
+
+    AttackNow=0
+
+  elif [ $AttackLevel -eq 2 ]; then
+
+    AttackNow=0
+
+  elif [ $AttackLevel -eq 1 ]; then
+
+    AttackNow=0
+
+  fi
+
+# END fAttackDetermination function
+}
+
+# START fAttack function
+function fAttack {
+
+  fGenerateThreatID
+
+  # object network Threat-123456789-Src
+  #  host 8.8.8.8
+  #  description Generated at Wed Oct  8 11:49:29 EDT 2014 by x ThreatID: 123456789
+
+  # object-group network ThreatObjects
+  #  network-object object Threat-123456789-Src
+
+# END fAttack function
+}
 
 # BEGIN RUN LIST
 
-while :
+while read line
 
 do
 
@@ -120,7 +256,17 @@ do
 
     if [ $IsInDataBase -eq 0 ]; then
 
-      fGenerateThreatID
+      fSrcIsPublic
+      fDestIsPublic
+      fZone
+      fAttackLevel
+      fAttackDetermination
+
+      if [ $AttackNow -eq 1 ]; then
+
+        fAttack
+
+      fi
 
     fi
 
